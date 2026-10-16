@@ -1,0 +1,105 @@
+resources:
+  jobs:
+
+    # Runs ddl/*.sql then seed/*.sql. Run on demand, not on every deploy.
+    setup_serverless:
+      name: setup_serverless_${bundle.target}
+      tasks:
+        - task_key: ddl
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_sql.py
+            parameters: ["--folder", "ddl", "--catalog", "${var.catalog}", "--schema", "${var.schema}"]
+        - task_key: seed
+          depends_on:
+            - task_key: ddl
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_sql.py
+            parameters: ["--folder", "seed", "--catalog", "${var.catalog}", "--schema", "${var.schema}"]
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+            dependencies:
+              - -r ${workspace.file_path}/requirements-cluster.txt
+
+    # Regular pipeline: one task per entity
+    entity_serverless:
+      name: entity_serverless_${bundle.target}
+      tasks:
+        - task_key: customer
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_entity.py
+            parameters: ["--entity", "customer", "--catalog", "${var.catalog}", "--schema", "${var.schema}"]
+        - task_key: order
+          depends_on:
+            - task_key: customer
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/run_entity.py
+            parameters: ["--entity", "order", "--catalog", "${var.catalog}", "--schema", "${var.schema}"]
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+            dependencies:
+              - -r ${workspace.file_path}/requirements-cluster.txt
+      # schedule:
+      #   quartz_cron_expression: "0 0 6 * * ?"
+      #   timezone_id: UTC
+
+    # On-demand: databricks bundle run restatement_serverless -t dev
+    restatement_serverless:
+      name: restatement_serverless_${bundle.target}
+      parameters:
+        - name: start_date
+          default: "2024-01-01"
+        - name: end_date
+          default: "2024-01-31"
+      tasks:
+        - task_key: restatement
+          environment_key: default
+          spark_python_task:
+            python_file: ../jobs/restatement.py
+            parameters:
+              - "--entity"
+              - "order"
+              - "--catalog"
+              - "${var.catalog}"
+              - "--schema"
+              - "${var.schema}"
+              - "--start-date"
+              - "{{job.parameters.start_date}}"
+              - "--end-date"
+              - "{{job.parameters.end_date}}"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "3"
+            dependencies:
+              - -r ${workspace.file_path}/requirements-cluster.txt
+
+    # --- Job cluster variant (uncomment to compare with serverless) ---
+    # entity_cluster:
+    #   name: entity_cluster_${bundle.target}
+    #   job_clusters:
+    #     - job_cluster_key: main
+    #       new_cluster:
+    #         spark_version: 15.4.x-scala2.12
+    #         node_type_id: i3.xlarge
+    #         num_workers: 2
+    #         data_security_mode: SINGLE_USER
+    #         aws_attributes:
+    #           first_on_demand: 1
+    #           availability: SPOT_WITH_FALLBACK
+    #           zone_id: auto
+    #   tasks:
+    #     - task_key: customer
+    #       job_cluster_key: main
+    #       spark_python_task:
+    #         python_file: ../jobs/run_entity.py
+    #         parameters: ["--entity", "customer", "--catalog", "${var.catalog}", "--schema", "${var.schema}"]
+    #       libraries:
+    #         - requirements: ${workspace.file_path}/requirements-cluster.txt
