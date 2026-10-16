@@ -1,0 +1,25 @@
+name: Run Databricks job (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job resource key
+        required: true
+        type: choice
+        options: [setup_serverless, entity_serverless, restatement_serverless]
+      target:
+        description: Bundle target
+        required: true
+        default: dev
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - run: databricks bundle run ${{ inputs.job }} -t ${{ inputs.target }}

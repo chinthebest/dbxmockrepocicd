@@ -1,0 +1,22 @@
+name: CI
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-validate:
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pytest pyspark ruff
+      - run: ruff check src jobs tests
+      - run: pytest
+      - uses: databricks/setup-cli@main      # pin to a release tag for production
+      - run: databricks bundle validate -t dev
