@@ -1,0 +1,2 @@
+# Third-party libraries needed on Databricks compute (do NOT list pyspark)
+requests==2.32.3
